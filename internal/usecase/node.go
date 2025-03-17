@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/AndrivA89/knowledge-manager/internal/domain"
+	"github.com/AndrivA89/neo4j-go-playground/internal/domain"
 )
 
 type NodeUseCase struct {

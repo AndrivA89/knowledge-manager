@@ -1,4 +1,4 @@
-module github.com/AndrivA89/knowledge-manager
+module github.com/AndrivA89/neo4j-go-playground
 
 go 1.22
 
