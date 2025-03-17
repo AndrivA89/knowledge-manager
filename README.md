@@ -40,6 +40,10 @@
    ```bash
    docker run --name neo4j -p7474:7474 -p7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:4.4
    ```
+   or run docker-compose file in current project:
+   ```bash
+   docker-compose up -d
+   ```
 
 4. **Run the Application**:
 
