@@ -8,7 +8,7 @@ import (
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
-	"github.com/AndrivA89/knowledge-manager/internal/domain"
+	"github.com/AndrivA89/neo4j-go-playground/internal/domain"
 )
 
 type NodeRepository struct {

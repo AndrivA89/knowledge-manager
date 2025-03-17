@@ -12,7 +12,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AndrivA89/knowledge-manager/internal/domain"
+	"github.com/AndrivA89/neo4j-go-playground/internal/domain"
 )
 
 var testDriver neo4j.DriverWithContext

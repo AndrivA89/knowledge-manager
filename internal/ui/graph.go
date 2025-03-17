@@ -17,8 +17,8 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/AndrivA89/knowledge-manager/internal/domain"
-	"github.com/AndrivA89/knowledge-manager/internal/usecase"
+	"github.com/AndrivA89/neo4j-go-playground/internal/domain"
+	"github.com/AndrivA89/neo4j-go-playground/internal/usecase"
 )
 
 type Edge struct {
@@ -108,9 +108,8 @@ func (nw *NodeWidget) Tapped(_ *fyne.PointEvent) {
 	contentEntry := widget.NewMultiLineEntry()
 	contentEntry.SetText(nw.Node.Content)
 	typeSelect := widget.NewSelect([]string{
-		string(domain.Concept), string(domain.Note), string(domain.References)},
-		nil,
-	)
+		string(domain.Concept), string(domain.Note), string(domain.References),
+	}, nil)
 	typeSelect.SetSelected(string(nw.Node.Type))
 	tagsEntry := widget.NewEntry()
 	tagsEntry.SetText(strings.Join(nw.Node.Tags, ", "))
@@ -139,8 +138,8 @@ func (nw *NodeWidget) Tapped(_ *fyne.PointEvent) {
 			if nw.OnUpdate != nil {
 				nw.OnUpdate(nw.Node)
 			}
-			pop.Hide()
 		}
+		pop.Hide()
 	})
 
 	deleteBtn := widget.NewButton("Delete", func() {
@@ -214,44 +213,134 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	w := a.NewWindow("Graph Visualization")
 	w.Resize(fyne.NewSize(800, 600))
 
-	edges := initialEdges
+	allNodes := nodes
+	filteredNodes := nodes
+	filteredEdges := initialEdges
+
 	scrollContainer := container.NewScroll(container.NewWithoutLayout())
 	scrollContainer.SetMinSize(fyne.NewSize(800, 600))
 
 	var onDeleteCallback func(*domain.Node)
 	var onUpdateCallback func(*domain.Node)
 
-	onUpdateCallback = func(updatedNode *domain.Node) {
-		graphContainer := buildGraphContainer(useCase, nodes, edges, w, onDeleteCallback, onUpdateCallback)
-		scrollContainer.Content = graphContainer
-		scrollContainer.Refresh()
-		w.Content().Refresh()
-	}
-
 	onDeleteCallback = func(deletedNode *domain.Node) {
-		for i, node := range nodes {
-			if node.ID == deletedNode.ID {
-				nodes = append(nodes[:i], nodes[i+1:]...)
-				break
+		var newAll []*domain.Node
+		for _, n := range allNodes {
+			if n.ID != deletedNode.ID {
+				newAll = append(newAll, n)
 			}
 		}
-		newEdges := make([]Edge, 0, len(edges))
-		for _, e := range edges {
+		allNodes = newAll
+
+		var newFiltered []*domain.Node
+		for _, n := range filteredNodes {
+			if n.ID != deletedNode.ID {
+				newFiltered = append(newFiltered, n)
+			}
+		}
+		filteredNodes = newFiltered
+
+		var newEdges []Edge
+		for _, e := range filteredEdges {
 			if e.From.ID != deletedNode.ID && e.To.ID != deletedNode.ID {
 				newEdges = append(newEdges, e)
 			}
 		}
-		edges = newEdges
+		filteredEdges = newEdges
 
-		graphContainer := buildGraphContainer(useCase, nodes, edges, w, onDeleteCallback, onUpdateCallback)
-		scrollContainer.Content = graphContainer
+		newGraphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
+		scrollContainer.Content = newGraphContainer
 		scrollContainer.Refresh()
 		w.Content().Refresh()
 	}
 
-	graphContainer := buildGraphContainer(useCase, nodes, edges, w, onDeleteCallback, onUpdateCallback)
+	onUpdateCallback = func(updatedNode *domain.Node) {
+		newGraphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
+		scrollContainer.Content = newGraphContainer
+		scrollContainer.Refresh()
+		w.Content().Refresh()
+	}
+
+	graphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
 	scrollContainer.Content = graphContainer
 	scrollContainer.Refresh()
+
+	searchEntry := widget.NewEntry()
+	searchEntry.SetPlaceHolder("Enter search query...")
+	searchSelect := widget.NewSelect([]string{"Tag", "Title/Content", "All"}, nil)
+	searchSelect.SetSelected("All")
+	searchButton := widget.NewButton("Search", func() {
+		query := strings.TrimSpace(searchEntry.Text)
+		criteria := searchSelect.Selected
+		if query == "" {
+			filteredNodes = allNodes
+			filteredEdges = initialEdges
+		} else {
+			var newNodes []*domain.Node
+			for _, n := range allNodes {
+				lowerQuery := strings.ToLower(query)
+				if criteria == "Tag" {
+					for _, tag := range n.Tags {
+						if strings.Contains(strings.ToLower(tag), lowerQuery) {
+							newNodes = append(newNodes, n)
+							break
+						}
+					}
+				} else if criteria == "Title/Content" {
+					if strings.Contains(strings.ToLower(n.Title), lowerQuery) || strings.Contains(strings.ToLower(n.Content), lowerQuery) {
+						newNodes = append(newNodes, n)
+					}
+				} else if criteria == "All" {
+					found := false
+					for _, tag := range n.Tags {
+						if strings.Contains(strings.ToLower(tag), lowerQuery) {
+							found = true
+							break
+						}
+					}
+					if !found && (strings.Contains(strings.ToLower(n.Title), lowerQuery) || strings.Contains(strings.ToLower(n.Content), lowerQuery)) {
+						found = true
+					}
+					if found {
+						newNodes = append(newNodes, n)
+					}
+				}
+			}
+			filteredNodes = newNodes
+			var newEdges []Edge
+			for _, e := range initialEdges {
+				inFrom, inTo := false, false
+				for _, n := range filteredNodes {
+					if n.ID == e.From.ID {
+						inFrom = true
+					}
+					if n.ID == e.To.ID {
+						inTo = true
+					}
+				}
+				if inFrom && inTo {
+					newEdges = append(newEdges, e)
+				}
+			}
+			filteredEdges = newEdges
+		}
+		newGraphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
+		scrollContainer.Content = newGraphContainer
+		scrollContainer.Refresh()
+		w.Content().Refresh()
+	})
+	resetButton := widget.NewButton("Reset", func() {
+		filteredNodes = allNodes
+		filteredEdges = initialEdges
+		newGraphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
+		scrollContainer.Content = newGraphContainer
+		scrollContainer.Refresh()
+		w.Content().Refresh()
+	})
+
+	firstRow := container.NewBorder(nil, nil, searchSelect, nil, searchEntry)
+	secondRow := container.NewAdaptiveGrid(2, searchButton, resetButton)
+	searchContainer := container.NewVBox(firstRow, secondRow)
 
 	addNodeButton := widget.NewButton("Add Node", func() {
 		titleEntry := widget.NewEntry()
@@ -284,8 +373,9 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 					return
 				}
 				newNode.ID = id
-				nodes = append(nodes, newNode)
-				graphContainer = buildGraphContainer(useCase, nodes, edges, w, onDeleteCallback, onUpdateCallback)
+				allNodes = append(allNodes, newNode)
+				filteredNodes = allNodes
+				graphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
 				scrollContainer.Content = graphContainer
 				scrollContainer.Refresh()
 				w.Content().Refresh()
@@ -294,36 +384,31 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	})
 
 	addRelButton := widget.NewButton("Add Relationship", func() {
-		sourceOptions := make([]string, len(nodes))
-		for i, n := range nodes {
+		sourceOptions := make([]string, len(allNodes))
+		for i, n := range allNodes {
 			sourceOptions[i] = n.Title
 		}
 		sourceSelect := widget.NewSelect(sourceOptions, nil)
 		if len(sourceOptions) > 0 {
 			sourceSelect.SetSelected(sourceOptions[0])
 		}
-
-		targetOptions := make([]string, len(nodes))
-		for i, n := range nodes {
+		targetOptions := make([]string, len(allNodes))
+		for i, n := range allNodes {
 			targetOptions[i] = n.Title
 		}
 		targetCheckGroup := widget.NewCheckGroup(targetOptions, nil)
-
 		relTypeSelect := widget.NewSelect([]string{
 			string(domain.RelatedTo), string(domain.References), string(domain.IsPartOf),
 			string(domain.HasPart), string(domain.DependsOn), string(domain.IsPrecededBy),
 		}, nil)
 		relTypeSelect.SetSelected(string(domain.RelatedTo))
-
 		descEntry := widget.NewEntry()
-
 		formItems := []*widget.FormItem{
 			widget.NewFormItem("Source Node", sourceSelect),
 			widget.NewFormItem("Target Nodes", targetCheckGroup),
 			widget.NewFormItem("Relationship Type", relTypeSelect),
 			widget.NewFormItem("Description", descEntry),
 		}
-
 		dialog.ShowForm("Add New Relationship", "Submit", "Cancel", formItems, func(valid bool) {
 			if !valid {
 				return
@@ -332,26 +417,23 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 			if sourceIndex < 0 {
 				return
 			}
-			sourceNode := nodes[sourceIndex]
-
+			sourceNode := allNodes[sourceIndex]
 			var targetIDs []string
 			for _, sel := range targetCheckGroup.Selected {
 				tIdx := indexOf(targetOptions, sel)
 				if tIdx >= 0 && tIdx != sourceIndex {
-					targetIDs = append(targetIDs, nodes[tIdx].ID)
+					targetIDs = append(targetIDs, allNodes[tIdx].ID)
 				}
 			}
 			if len(targetIDs) == 0 {
 				return
 			}
-
 			newRel := &domain.Relationship{
 				SourceID:    sourceNode.ID,
 				TargetIDs:   targetIDs,
 				Type:        domain.RelationType(relTypeSelect.Selected),
 				Description: descEntry.Text,
 			}
-
 			go func() {
 				createdIDs, err := useCase.CreateRelationship(context.Background(), newRel)
 				if err != nil {
@@ -361,21 +443,20 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 				if len(createdIDs) != len(targetIDs) {
 					fmt.Printf("Warning: createdIDs length (%d) does not match targetIDs length (%d)\n", len(createdIDs), len(targetIDs))
 				}
-
 				for i, relID := range createdIDs {
 					if i >= len(targetIDs) {
 						break
 					}
 					tID := targetIDs[i]
 					var targetNode *domain.Node
-					for _, n := range nodes {
+					for _, n := range allNodes {
 						if n.ID == tID {
 							targetNode = n
 							break
 						}
 					}
 					if targetNode != nil {
-						edges = append(edges, Edge{
+						filteredEdges = append(filteredEdges, Edge{
 							ID:   relID,
 							From: sourceNode,
 							To:   targetNode,
@@ -383,7 +464,7 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 						})
 					}
 				}
-				graphContainer = buildGraphContainer(useCase, nodes, edges, w, onDeleteCallback, onUpdateCallback)
+				graphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
 				scrollContainer.Content = graphContainer
 				scrollContainer.Refresh()
 				w.Content().Refresh()
@@ -392,12 +473,12 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	})
 
 	removeRelButton := widget.NewButton("Remove Relationship", func() {
-		if len(edges) == 0 {
+		if len(filteredEdges) == 0 {
 			dialog.ShowInformation("No relationships", "No relationships to remove", w)
 			return
 		}
 		var edgeOptions []string
-		for i, e := range edges {
+		for i, e := range filteredEdges {
 			label := fmt.Sprintf("[%d] %s -> %s (%s)", i, e.From.Title, e.To.Title, e.Type)
 			edgeOptions = append(edgeOptions, label)
 		}
@@ -416,7 +497,7 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 			if idx < 0 {
 				return
 			}
-			edge := edges[idx]
+			edge := filteredEdges[idx]
 			if edge.ID != "" {
 				err := useCase.DeleteRelationship(context.Background(), edge.ID)
 				if err != nil {
@@ -424,16 +505,17 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 					return
 				}
 			}
-			edges = append(edges[:idx], edges[idx+1:]...)
-			graphContainer = buildGraphContainer(useCase, nodes, edges, w, onDeleteCallback, onUpdateCallback)
+			filteredEdges = append(filteredEdges[:idx], filteredEdges[idx+1:]...)
+			graphContainer := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
 			scrollContainer.Content = graphContainer
 			scrollContainer.Refresh()
 			w.Content().Refresh()
 		}, w)
 	})
 
-	buttons := container.NewHBox(addNodeButton, addRelButton, removeRelButton)
-	content := container.NewBorder(buttons, nil, nil, nil, scrollContainer)
+	buttons := container.NewAdaptiveGrid(3, addNodeButton, addRelButton, removeRelButton)
+	topContainer := container.NewVBox(searchContainer)
+	content := container.NewBorder(topContainer, buttons, nil, nil, scrollContainer)
 	w.SetContent(content)
 	w.ShowAndRun()
 }
