@@ -50,13 +50,17 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if _, err = nodeUseCase.CreateNode(ctx, sampleNode1); err != nil {
+	id, err := nodeUseCase.CreateNode(ctx, sampleNode1)
+	if err != nil {
 		log.Fatalf("Failed to create first node: %v", err)
 	}
+	sampleNode1.ID = id
 
-	if _, err = nodeUseCase.CreateNode(ctx, sampleNode2); err != nil {
+	id, err = nodeUseCase.CreateNode(ctx, sampleNode2)
+	if err != nil {
 		log.Fatalf("Failed to create second node: %v", err)
 	}
+	sampleNode2.ID = id
 
 	nodes := []*domain.Node{sampleNode1, sampleNode2}
 
