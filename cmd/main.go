@@ -36,6 +36,7 @@ func main() {
 		Title:   "First Node",
 		Content: "Sample Note",
 		Type:    domain.Note,
+		Tags:    []string{"1", "2"},
 	}
 
 	sampleNode2 := &domain.Node{
@@ -43,6 +44,7 @@ func main() {
 		Title:   "Second Node",
 		Content: "Reference",
 		Type:    domain.Reference,
+		Tags:    []string{"3", "4"},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

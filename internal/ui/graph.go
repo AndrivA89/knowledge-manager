@@ -239,44 +239,23 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	searchButton := widget.NewButton("Search", func() {
 		query := strings.TrimSpace(searchEntry.Text)
 		criteria := searchSelect.Selected
-		if query == "" {
-			filteredNodes = allNodes
-			filteredEdges = initialEdges
-		} else {
-			filteredNodes = filterNodes(allNodes, func(n *domain.Node) bool {
-				lowerQuery := strings.ToLower(query)
-				switch criteria {
-				case "Tag":
-					for _, tag := range n.Tags {
-						if strings.Contains(strings.ToLower(tag), lowerQuery) {
-							return true
-						}
-					}
-				case "Title/Content":
-					if strings.Contains(strings.ToLower(n.Title), lowerQuery) || strings.Contains(strings.ToLower(n.Content), lowerQuery) {
-						return true
-					}
-				case "All":
-					if strings.Contains(strings.ToLower(n.Title), lowerQuery) ||
-						strings.Contains(strings.ToLower(n.Content), lowerQuery) {
-						return true
-					}
-					for _, tag := range n.Tags {
-						if strings.Contains(strings.ToLower(tag), lowerQuery) {
-							return true
-						}
-					}
-				}
-				return false
-			})
-			// Filter edges to only include those with both nodes in filteredNodes.
-			filteredEdges = []Edge{}
-			for _, e := range initialEdges {
-				if containsNode(filteredNodes, e.From) && containsNode(filteredNodes, e.To) {
-					filteredEdges = append(filteredEdges, e)
-				}
+		// Call the search method in the usecase layer.
+		results, err := useCase.SearchNodes(context.Background(), query, criteria)
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		// Update filteredNodes and rebuild graph accordingly.
+		filteredNodes = results
+		// For edges, you might want to decide how to update them (e.g., only show edges where both nodes are in results).
+		var newEdges []Edge
+		for _, e := range initialEdges {
+			if containsNode(filteredNodes, e.From) && containsNode(filteredNodes, e.To) {
+				newEdges = append(newEdges, e)
 			}
 		}
+		filteredEdges = newEdges
+
 		newGraph := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
 		scrollContainer.Content = newGraph
 		scrollContainer.Refresh()
@@ -487,8 +466,7 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	})
 
 	topButtons := container.NewAdaptiveGrid(3, addNodeButton, addRelButton, removeRelButton)
-	topContainer := container.NewVBox(searchContainer, topButtons)
-	content := container.NewBorder(topContainer, nil, nil, nil, scrollContainer)
+	content := container.NewBorder(searchContainer, topButtons, nil, nil, scrollContainer)
 	w.SetContent(content)
 	w.ShowAndRun()
 }

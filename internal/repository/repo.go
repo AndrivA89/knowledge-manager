@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -36,16 +37,17 @@ func (r *NodeRepository) CreateNode(ctx context.Context, node *domain.Node) (str
 
 		query := `
 			CREATE (n:Node {
-				id: randomUUID(),
-				title: $title,
-				content: $content,
-				type: $type,
-				created_at: datetime($created_at),
-				updated_at: datetime($updated_at)
+    			id: randomUUID(),
+    			title: $title,
+    			content: $content,
+   			 	type: $type,
+    			created_at: datetime($created_at),
+    			updated_at: datetime($updated_at),
+    			tags: $tags
 			})
 			SET n:` + string(node.Type) + `
-			FOREACH (tag IN $tags | MERGE (t:Tag {name: tag}) MERGE (n)-[:HAS_TAG]->(t))
-			RETURN n.id as id
+				FOREACH (tag IN $tags | MERGE (t:Tag {name: tag}) MERGE (n)-[:HAS_TAG]->(t))
+				RETURN n.id as id
 		`
 
 		params := map[string]interface{}{
@@ -315,4 +317,95 @@ func (r *NodeRepository) DeleteRelationship(ctx context.Context, relationshipID 
 	})
 
 	return err
+}
+
+// SearchNodes searches for nodes based on a query and criteria.
+// Criteria can be "Tag", "Title/Content", or "All".
+func (r *NodeRepository) SearchNodes(ctx context.Context, query, criteria string) ([]*domain.Node, error) {
+	// Convert query to lowercase for case-insensitive search.
+	query = strings.ToLower(query)
+	params := map[string]interface{}{
+		"query": query,
+	}
+	var cypher string
+	switch criteria {
+	case "Tag":
+		cypher = `
+			MATCH (t:Tag)
+			WHERE toLower(t.name) =~ ('.*' + $query + '.*')
+			MATCH (n:Node)-[:HAS_TAG]->(t)
+			RETURN n, collect(distinct t.name) as tags
+		`
+	case "Title/Content":
+		cypher = `
+			MATCH (n:Node)
+			WHERE toLower(n.title) CONTAINS $query OR toLower(n.content) CONTAINS $query
+			OPTIONAL MATCH (n)-[:HAS_TAG]->(t:Tag)
+			RETURN n, collect(distinct t.name) as tags
+		`
+	case "All":
+		cypher = `
+			MATCH (n:Node)
+			OPTIONAL MATCH (n)-[:HAS_TAG]->(t:Tag)
+			WITH n, collect(distinct t.name) as tags
+			WHERE toLower(n.title) CONTAINS $query 
+			   OR toLower(n.content) CONTAINS $query 
+			   OR any(tag IN tags WHERE toLower(tag) CONTAINS $query)
+			RETURN n, tags
+		`
+	default:
+		cypher = `
+			MATCH (n:Node)
+			OPTIONAL MATCH (n)-[:HAS_TAG]->(t:Tag)
+			RETURN n, collect(distinct t.name) as tags
+		`
+	}
+
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
+		res, err := tx.Run(ctx, cypher, params)
+		if err != nil {
+			return nil, err
+		}
+		var nodes []*domain.Node
+		for res.Next(ctx) {
+			record := res.Record()
+			nVal, ok := record.Get("n")
+			if !ok {
+				continue
+			}
+			nNode, ok := nVal.(neo4j.Node)
+			if !ok {
+				continue
+			}
+			props := nNode.Props
+			node := &domain.Node{
+				ID:      props["id"].(string),
+				Title:   props["title"].(string),
+				Content: props["content"].(string),
+				Type:    domain.NodeType(props["type"].(string)),
+				Tags:    []string{},
+			}
+			if tagsVal, found := record.Get("tags"); found {
+				if tagsSlice, ok := tagsVal.([]interface{}); ok {
+					for _, t := range tagsSlice {
+						if tagStr, ok := t.(string); ok {
+							node.Tags = append(node.Tags, tagStr)
+						}
+					}
+				}
+			}
+			nodes = append(nodes, node)
+		}
+		if err = res.Err(); err != nil {
+			return nil, err
+		}
+		return nodes, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.([]*domain.Node), nil
 }

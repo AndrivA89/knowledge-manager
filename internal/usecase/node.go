@@ -39,3 +39,7 @@ func (uc *NodeUseCase) DeleteNode(ctx context.Context, id string) error {
 func (uc *NodeUseCase) DeleteRelationship(ctx context.Context, relationshipID string) error {
 	return uc.repo.DeleteRelationship(ctx, relationshipID)
 }
+
+func (uc *NodeUseCase) SearchNodes(ctx context.Context, query, criteria string) ([]*domain.Node, error) {
+	return uc.repo.SearchNodes(ctx, query, criteria)
+}

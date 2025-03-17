@@ -13,4 +13,5 @@ type NodeRepository interface {
 	UpdateNode(ctx context.Context, node *domain.Node) error
 	DeleteNode(ctx context.Context, id string) error
 	DeleteRelationship(ctx context.Context, relationshipID string) error
+	SearchNodes(ctx context.Context, query, criteria string) ([]*domain.Node, error)
 }

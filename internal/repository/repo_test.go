@@ -201,3 +201,123 @@ func TestMultipleRelationships(t *testing.T) {
 	err = repo.DeleteNode(ctx, target2.ID)
 	assert.NoError(t, err, "DeleteNode for target2 should succeed")
 }
+
+func TestSearchNodesByTag(t *testing.T) {
+	ctx := context.Background()
+	repo := NewNodeRepository(testDriver)
+
+	// Create two nodes.
+	node1 := &domain.Node{
+		Title:   "Golang Tutorial",
+		Content: "Learn how to use Go with Neo4j",
+		Type:    domain.Concept,
+		Tags:    []string{"golang", "neo4j", "tutorial"},
+	}
+	node2 := &domain.Node{
+		Title:   "Graph Databases",
+		Content: "Overview of graph databases",
+		Type:    domain.Concept,
+		Tags:    []string{"database", "graph"},
+	}
+	id1, err := repo.CreateNode(ctx, node1)
+	assert.NoError(t, err, "CreateNode for node1 should succeed")
+	id2, err := repo.CreateNode(ctx, node2)
+	assert.NoError(t, err, "CreateNode for node2 should succeed")
+	node1.ID = id1
+	node2.ID = id2
+
+	// Allow some time for Neo4j to process.
+	time.Sleep(500 * time.Millisecond)
+
+	// Search by tag "neo4j" using criteria "Tag".
+	results, err := repo.SearchNodes(ctx, "neo4j", "Tag")
+	assert.NoError(t, err, "SearchNodes (Tag) should not error")
+	// Expect only node1 to be found.
+	assert.Len(t, results, 1, "Should find one node for tag 'neo4j'")
+	assert.Equal(t, node1.Title, results[0].Title, "Found node should match node1")
+
+	// Cleanup.
+	err = repo.DeleteNode(ctx, node1.ID)
+	assert.NoError(t, err, "DeleteNode for node1 should succeed")
+	err = repo.DeleteNode(ctx, node2.ID)
+	assert.NoError(t, err, "DeleteNode for node2 should succeed")
+}
+
+func TestSearchNodesByTitleContent(t *testing.T) {
+	ctx := context.Background()
+	repo := NewNodeRepository(testDriver)
+
+	node1 := &domain.Node{
+		Title:   "Learning Golang",
+		Content: "This is a tutorial for Golang.",
+		Type:    domain.Concept,
+		Tags:    []string{"golang"},
+	}
+	node2 := &domain.Node{
+		Title:   "Graph Databases",
+		Content: "Neo4j is a popular graph database.",
+		Type:    domain.Concept,
+		Tags:    []string{"neo4j", "graph"},
+	}
+
+	id1, err := repo.CreateNode(ctx, node1)
+	assert.NoError(t, err, "CreateNode for node1 should succeed")
+	id2, err := repo.CreateNode(ctx, node2)
+	assert.NoError(t, err, "CreateNode for node2 should succeed")
+	node1.ID = id1
+	node2.ID = id2
+
+	time.Sleep(500 * time.Millisecond)
+
+	// Search by title/content "Golang".
+	results, err := repo.SearchNodes(ctx, "Golang", "Title/Content")
+	assert.NoError(t, err, "SearchNodes (Title/Content) should not error")
+	assert.Len(t, results, 1, "Should find one node containing 'Golang'")
+	assert.Equal(t, node1.Title, results[0].Title, "Found node should match node1")
+
+	// Cleanup.
+	err = repo.DeleteNode(ctx, node1.ID)
+	assert.NoError(t, err, "DeleteNode for node1 should succeed")
+	err = repo.DeleteNode(ctx, node2.ID)
+	assert.NoError(t, err, "DeleteNode for node2 should succeed")
+}
+
+func TestSearchNodesAll(t *testing.T) {
+	ctx := context.Background()
+	repo := NewNodeRepository(testDriver)
+
+	node1 := &domain.Node{
+		Title:   "Learn Golang",
+		Content: "Golang tutorial and tips",
+		Type:    domain.Concept,
+		Tags:    []string{"golang", "tutorial"},
+	}
+	node2 := &domain.Node{
+		Title:   "Graph Theory",
+		Content: "An introduction to graph theory",
+		Type:    domain.Concept,
+		Tags:    []string{"graph", "math"},
+	}
+
+	id1, err := repo.CreateNode(ctx, node1)
+	assert.NoError(t, err, "CreateNode for node1 should succeed")
+	id2, err := repo.CreateNode(ctx, node2)
+	assert.NoError(t, err, "CreateNode for node2 should succeed")
+	node1.ID = id1
+	node2.ID = id2
+
+	time.Sleep(500 * time.Millisecond)
+
+	// Search with query "graph" using criteria "All"
+	results, err := repo.SearchNodes(ctx, "graph", "All")
+	assert.NoError(t, err, "SearchNodes (All) should not error")
+	// Expect to find node2 (title contains "Graph" and tag "graph").
+	assert.Len(t, results, 1, "Should find one node for query 'graph'")
+	assert.Equal(t, node2.Title, results[0].Title, "Found node should match node2")
+
+	// Cleanup.
+	err = repo.DeleteNode(ctx, node1.ID)
+	assert.NoError(t, err, "DeleteNode for node1 should succeed")
+	err = repo.DeleteNode(ctx, node2.ID)
+	assert.NoError(t, err, "DeleteNode for node2 should succeed")
+}
