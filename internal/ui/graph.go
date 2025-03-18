@@ -201,6 +201,8 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	filteredNodes := nodes
 	// filteredEdges holds the current edges.
 	filteredEdges := initialEdges
+	// allEdges holds all relationships
+	allEdges := initialEdges
 
 	scrollContainer := container.NewScroll(container.NewWithoutLayout())
 	scrollContainer.SetMinSize(fyne.NewSize(800, 600))
@@ -237,6 +239,9 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 	searchSelect := widget.NewSelect([]string{"Tag", "Title/Content", "All"}, nil)
 	searchSelect.SetSelected("All")
 	searchButton := widget.NewButton("Search", func() {
+		if searchEntry.Text == "" {
+			return
+		}
 		query := strings.TrimSpace(searchEntry.Text)
 		criteria := searchSelect.Selected
 		// Call the search method in the usecase layer.
@@ -262,8 +267,11 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 		w.Content().Refresh()
 	})
 	resetButton := widget.NewButton("Reset", func() {
+		if searchEntry.Text == "" {
+			return
+		}
 		filteredNodes = allNodes
-		filteredEdges = initialEdges
+		filteredEdges = allEdges
 		newGraph := buildGraphContainer(useCase, filteredNodes, filteredEdges, w, onDeleteCallback, onUpdateCallback)
 		scrollContainer.Content = newGraph
 		scrollContainer.Refresh()
@@ -401,12 +409,15 @@ func ShowGraphUI(useCase *usecase.NodeUseCase, nodes []*domain.Node, initialEdge
 					}
 
 					if targetNode != nil {
-						filteredEdges = append(filteredEdges, Edge{
+						newEdge := Edge{
 							ID:   relID,
 							From: sourceNode,
 							To:   targetNode,
 							Type: relTypeSelect.Selected,
-						})
+						}
+
+						allEdges = append(allEdges, newEdge)
+						filteredEdges = append(filteredEdges, newEdge)
 					}
 				}
 
